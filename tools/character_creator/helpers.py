@@ -10,9 +10,9 @@ def prof_bonus(level: int) -> int:
     if level >= 5:  return 3
     return 2
 
-def compute_skill_bonuses(abilities: Dict[str, int],
-                          proficient_skills: Iterable[str],
-                          level: int) -> Dict[str, int]:
+def compute_skill_bonuses(abilities: dict[str, int],
+                          proficient_skills,
+                          level: int) -> dict[str, int]:
     PB = prof_bonus(level)
     prof_set = set(proficient_skills)
     out = {}
@@ -23,12 +23,12 @@ def compute_skill_bonuses(abilities: Dict[str, int],
         out[sk] = mod
     return out
 
-def validate_standard_array(assignment: Dict[str, int]) -> bool:
+def validate_standard_array(assignment: dict[str, int]) -> bool:
     vals = sorted(int(assignment.get(a, 0)) for a in ABILITIES)
     return vals == sorted(STANDARD_ARRAY)
 
-def point_buy_cost(assignment: Dict[str, int]) -> int:
+def point_buy_cost(assignment: dict[str, int]) -> int:
     return sum(POINT_BUY_COST[int(assignment[a])] for a in ABILITIES)
 
-def within_point_buy_budget(assignment: Dict[str, int]) -> bool:
+def within_point_buy_budget(assignment: dict[str, int]) -> bool:
     return point_buy_cost(assignment) <= POINT_BUY_BUDGET
