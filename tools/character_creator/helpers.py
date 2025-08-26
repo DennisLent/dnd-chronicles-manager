@@ -1,34 +1,22 @@
-from srd_data import ABILITIES, SKILLS, POINT_BUY_COST, POINT_BUY_BUDGET, STANDARD_ARRAY
+"""Deprecated helpers kept for backward compatibility.
 
-def ability_mod(score: int) -> int:
-    return (score - 10) // 2
+These functions are thin wrappers around the new logic modules.
+"""
 
-def prof_bonus(level: int) -> int:
-    if level >= 17: return 6
-    if level >= 13: return 5
-    if level >= 9:  return 4
-    if level >= 5:  return 3
-    return 2
+from __future__ import annotations
 
-def compute_skill_bonuses(abilities: dict[str, int],
-                          proficient_skills,
-                          level: int) -> dict[str, int]:
-    PB = prof_bonus(level)
-    prof_set = set(proficient_skills)
-    out = {}
-    for sk, ab in SKILLS.items():
-        mod = ability_mod(int(abilities[ab]))
-        if sk in prof_set:
-            mod += PB
-        out[sk] = mod
-    return out
+from .logic.derivations import ability_mod, prof_bonus, compute_skill_bonuses
+from .logic.validators import (
+    validate_standard_array,
+    validate_point_buy,
+    validate_skill_count,
+)
 
-def validate_standard_array(assignment: dict[str, int]) -> bool:
-    vals = sorted(int(assignment.get(a, 0)) for a in ABILITIES)
-    return vals == sorted(STANDARD_ARRAY)
-
-def point_buy_cost(assignment: dict[str, int]) -> int:
-    return sum(POINT_BUY_COST[int(assignment[a])] for a in ABILITIES)
-
-def within_point_buy_budget(assignment: dict[str, int]) -> bool:
-    return point_buy_cost(assignment) <= POINT_BUY_BUDGET
+__all__ = [
+    "ability_mod",
+    "prof_bonus",
+    "compute_skill_bonuses",
+    "validate_standard_array",
+    "validate_point_buy",
+    "validate_skill_count",
+]
