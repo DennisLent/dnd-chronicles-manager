@@ -10,6 +10,8 @@ from ..srd_data import ABILITIES
 class Selections:
     """User choices captured during character creation."""
 
+    name: str = ""
+    player: str = ""
     race: str = ""
     subrace: Optional[str] = None
     klass: str = ""
