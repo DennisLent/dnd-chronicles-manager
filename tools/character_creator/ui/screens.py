@@ -401,7 +401,7 @@ class ClassScreen(ttk.Frame):
         ttk.Label(self.skills_frame, text=f"Choose {self.choose} skills:").pack(anchor="w")
         ttk.Label(self.skills_frame, textvariable=self.skill_count_var).pack(anchor="w")
         self.skill_vars = {}
-        self.model.class_skill_picks = set()
+        self.model.class_skill_picks = []
         for sk in info.get("from", []):
             var = tk.BooleanVar(value=False)
             chk = ttk.Checkbutton(
@@ -435,7 +435,7 @@ class ClassScreen(ttk.Frame):
             for sk in picks[self.choose:]:
                 self.skill_vars[sk].set(False)
             picks = [sk for sk, var in self.skill_vars.items() if var.get()]
-        self.model.class_skill_picks = set(picks)
+        self.model.class_skill_picks = sorted(picks)
         self.skill_count_var.set(f"{len(picks)} of {self.choose} chosen")
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
@@ -443,7 +443,7 @@ class ClassScreen(ttk.Frame):
         self.model.save_draft()
 
     def _reset(self) -> None:
-        self.model.class_skill_picks = set()
+        self.model.class_skill_picks = []
         self.model.equipment_choices = []
         self.model.class_saves = []
         self.model.hit_die = ""
@@ -492,7 +492,7 @@ class BackgroundScreen(ttk.Frame):
         if feature:
             text.append(f"Feature: {feature}")
         self.info_var.set("\n".join(text))
-        self.model.proficient_skills = set(skills)
+        self.model.proficient_skills = list(skills)
         self.model.background_languages = []
         self.model.background_details = {
             "skills": skills,
@@ -547,7 +547,7 @@ class BackgroundScreen(ttk.Frame):
     def _reset(self) -> None:
         self.model.background = ""
         self.model.background_languages = []
-        self.model.proficient_skills = set()
+        self.model.proficient_skills = []
         self.model.background_languages_needed = 0
         self.model.background_details = {}
         self.refresh_background()

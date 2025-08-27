@@ -25,6 +25,7 @@ def main() -> None:
     setup_styles()
 
     model = Selections.load_draft() or Selections()
+    model.attach_root(root)
 
     nb = ttk.Notebook(root)
     nb.pack(fill="both", expand=True)
@@ -44,6 +45,7 @@ def main() -> None:
     if Selections.load_draft() is not None:
         if not messagebox.askyesno("Resume", "Resume draft character?"):
             model = Selections()
+            model.attach_root(root)
             basics.model = abilities.model = cls.model = bg.model = spells.model = review.model = model
             Selections.clear_draft()
             for scr in (basics, abilities, cls, bg, spells, review):
@@ -62,12 +64,14 @@ def main() -> None:
         char = load_character(path)
         nonlocal model
         model = char.selections
+        model.attach_root(root)
         basics.model = abilities.model = cls.model = bg.model = spells.model = review.model = model
         refresh_all()
 
     def reset_all() -> None:
         nonlocal model
         model = Selections()
+        model.attach_root(root)
         basics.model = abilities.model = cls.model = bg.model = spells.model = review.model = model
         Selections.clear_draft()
         refresh_all()
