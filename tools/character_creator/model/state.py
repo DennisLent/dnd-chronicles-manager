@@ -18,6 +18,7 @@ class Selections:
     level: int = 1
     background: str = ""
     alignment: str = "True Neutral"
+    ability_method: str = "manual"
     abilities_base: Dict[str, int] = field(
         default_factory=lambda: {a: 10 for a in ABILITIES}
     )
@@ -36,6 +37,7 @@ class Selections:
     background_languages_needed: int = 0
     proficient_skills: Set[str] = field(default_factory=set)
     equipment_choices: List[str] = field(default_factory=list)
+    equipment_rows: int = 0
     chosen_spells: List[str] = field(default_factory=list)
     spellcasting: Dict[str, object] = field(default_factory=dict)
 

@@ -34,7 +34,11 @@ from ..logic.derivations import (
     compute_hp_level1,
     ability_mod,
 )
-from ..logic.validators import validate_skill_count
+from ..logic.validators import (
+    validate_skill_count,
+    validate_point_buy,
+    validate_standard_array,
+)
 
 ALL_LANGUAGES = sorted({lang for r in RACES.values() for lang in r.get("languages", [])})
 from .widgets import HelpBanner, LabeledNumber
@@ -170,8 +174,6 @@ class BasicsScreen(ttk.Frame):
                 child.refresh_spells()
             if hasattr(child, "refresh"):
                 child.refresh()
-            if hasattr(child, "refresh"):
-                child.refresh()
 
     def _on_subrace_change(self, *_):
         self.model.subrace = self.var_sub.get() or None
@@ -230,6 +232,23 @@ class AbilitiesScreen(ttk.Frame):
 
         HelpBanner(self, HELP["abilities"]).pack(anchor="w", pady=4)
 
+        # Generation method selection
+        self.method_var = tk.StringVar(value=self.model.ability_method)
+        method_row = ttk.Frame(self)
+        method_row.pack(anchor="w")
+        for text, val in [
+            ("Manual", "manual"),
+            ("Point-Buy", "point"),
+            ("Standard Array", "standard"),
+        ]:
+            ttk.Radiobutton(
+                method_row,
+                text=text,
+                value=val,
+                variable=self.method_var,
+                command=self._on_method_change,
+            ).pack(side="left", padx=4)
+
         row = ttk.Frame(self)
         row.pack(fill="x", pady=2)
         self.base_vars: Dict[str, tk.IntVar] = {}
@@ -256,6 +275,23 @@ class AbilitiesScreen(ttk.Frame):
         self.any_frame.pack_forget()
 
         self._refresh_any_widgets()
+        self._recompute()
+
+    def _on_method_change(self) -> None:
+        new = self.method_var.get()
+        if new == self.model.ability_method:
+            return
+        if not messagebox.askyesno(
+            "Switch Method",
+            "Changing ability generation method will reset scores. Continue?",
+        ):
+            self.method_var.set(self.model.ability_method)
+            return
+        self.model.ability_method = new
+        defaults = {a: (10 if new == "manual" else 8) for a in ABILITIES}
+        self.model.abilities_base.update(defaults)
+        for ab, var in self.base_vars.items():
+            var.set(defaults[ab])
         self._recompute()
 
     def _refresh_any_widgets(self) -> None:
@@ -292,6 +328,8 @@ class AbilitiesScreen(ttk.Frame):
         for child in self.master.winfo_children():
             if hasattr(child, "refresh_spells"):
                 child.refresh_spells()
+            if hasattr(child, "refresh"):
+                child.refresh()
 
 
 class ClassScreen(ttk.Frame):
@@ -321,8 +359,9 @@ class ClassScreen(ttk.Frame):
         self.choose = info.get("choose", 0)
         ttk.Label(self.skills_frame, text=f"Choose {self.choose} skills:").pack(anchor="w")
         self.skill_vars = {}
+        self.model.class_skill_picks = set()
         for sk in info.get("from", []):
-            var = tk.BooleanVar(value=sk in self.model.class_skill_picks)
+            var = tk.BooleanVar(value=False)
             chk = ttk.Checkbutton(
                 self.skills_frame, text=sk, variable=var, command=self._on_skill_change
             )
@@ -333,6 +372,8 @@ class ClassScreen(ttk.Frame):
             child.destroy()
         self.equip_vars = []
         rows = CLASS_STARTING_EQUIPMENT.get(klass, [])
+        self.model.equipment_rows = len(rows)
+        self.model.equipment_choices = ["" for _ in rows]
         for options in rows:
             v = tk.StringVar()
             cb = ttk.Combobox(
@@ -341,6 +382,7 @@ class ClassScreen(ttk.Frame):
             cb.pack(anchor="w")
             v.trace_add("write", self._on_equip_change)
             self.equip_vars.append(v)
+        self._on_equip_change()
 
     def _on_skill_change(self) -> None:
         picks = [sk for sk, var in self.skill_vars.items() if var.get()]
@@ -355,7 +397,7 @@ class ClassScreen(ttk.Frame):
                 child.refresh()
 
     def _on_equip_change(self, *_):
-        self.model.equipment_choices = [v.get() for v in self.equip_vars if v.get()]
+        self.model.equipment_choices = [v.get() for v in self.equip_vars]
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
                 child.refresh()
@@ -370,6 +412,7 @@ class BackgroundScreen(ttk.Frame):
         self.lang_frame = ttk.Frame(self)
         self.lang_frame.pack(anchor="w", pady=4)
         self.lang_vars: List[tk.StringVar] = []
+        self.lang_info_var = tk.StringVar()
         self.refresh_background()
 
     def refresh_background(self) -> None:
@@ -388,7 +431,8 @@ class BackgroundScreen(ttk.Frame):
         if feature:
             text.append(f"Feature: {feature}")
         self.info_var.set("\n".join(text))
-        self.model.proficient_skills.update(skills)
+        self.model.proficient_skills = set(skills)
+        self.model.background_languages = []
         langs = data.get("languages", [])
         for child in self.lang_frame.winfo_children():
             child.destroy()
@@ -396,6 +440,7 @@ class BackgroundScreen(ttk.Frame):
         if isinstance(langs, int):
             self.model.background_languages_needed = langs
             ttk.Label(self.lang_frame, text=f"Choose {langs} languages:").pack(anchor="w")
+            ttk.Label(self.lang_frame, textvariable=self.lang_info_var).pack(anchor="w")
             for _ in range(langs):
                 v = tk.StringVar()
                 cb = ttk.Combobox(
@@ -404,6 +449,7 @@ class BackgroundScreen(ttk.Frame):
                 cb.pack(anchor="w")
                 v.trace_add("write", self._on_lang_change)
                 self.lang_vars.append(v)
+            self._on_lang_change()
         else:
             self.model.background_languages_needed = 0
             self.model.background_languages = list(langs)
@@ -413,7 +459,19 @@ class BackgroundScreen(ttk.Frame):
                 ).pack(anchor="w")
 
     def _on_lang_change(self, *_):
+        seen = set()
+        for v in self.lang_vars:
+            val = v.get()
+            if val in seen:
+                v.set("")
+            elif val:
+                seen.add(val)
         self.model.background_languages = [v.get() for v in self.lang_vars if v.get()]
+        remaining = self.model.background_languages_needed - len(self.model.background_languages)
+        if remaining > 0:
+            self.lang_info_var.set(f"{remaining} remaining")
+        else:
+            self.lang_info_var.set("All selected")
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
                 child.refresh()
@@ -502,6 +560,9 @@ class ReviewScreen(ttk.Frame):
         speed = self.model.race_details.get("speed", 30)
         dark = self.model.race_details.get("darkvision", 0)
         passive = 10 + skills.get("Perception", 0)
+        languages = set(self.model.race_details.get("languages", [])) | set(
+            self.model.background_languages
+        )
         lines = [
             f"Name: {self.model.name} (Player: {self.model.player})",
             f"Race: {self.model.race} {self.model.subrace or ''}",
@@ -512,6 +573,8 @@ class ReviewScreen(ttk.Frame):
             f"Speed {speed} ft, Darkvision {dark} ft",
             f"Saving Throws: {', '.join(self.model.class_saves)} | Hit Die {self.model.hit_die}",
             f"Proficient Skills: {', '.join(sorted(profs))}",
+            f"Languages: {', '.join(sorted(languages))}",
+            f"Equipment: {', '.join(filter(None, self.model.equipment_choices))}",
             f"HP {hp} | Initiative {init} | Passive Perception {passive}",
         ]
         if self.model.spellcasting:
@@ -536,13 +599,33 @@ class ReviewScreen(ttk.Frame):
             errors.append("Class is required")
         if self.model.background_languages_needed > len(self.model.background_languages):
             errors.append("Select background languages")
+        if self.model.ability_method == "point":
+            errors.extend(validate_point_buy(self.model.abilities_base))
+        elif self.model.ability_method == "standard":
+            errors.extend(validate_standard_array(self.model.abilities_base))
         errors.extend(validate_skill_count(self.model.klass, self.model.class_skill_picks))
         if "ANY" in self.model.race_details.get("asi", {}) and len(self.model.asi_any_choices) != 2:
             errors.append("Choose two abilities for racial bonus")
+        missing_rows = [
+            str(i + 1)
+            for i, choice in enumerate(self.model.equipment_choices)
+            if not choice
+        ]
+        if missing_rows:
+            errors.append(
+                "Pick 1 option in Equipment row(s) " + ", ".join(missing_rows)
+            )
         if errors:
             messagebox.showerror("Validation", "\n".join(errors))
             return
         final = self.model.abilities_final or self.model.abilities_base
+        profs = set(self.model.proficient_skills) | set(self.model.class_skill_picks)
+        skills = compute_skill_bonuses(final, profs, self.model.level)
+        init = compute_initiative(final)
+        hp = compute_hp_level1(self.model.klass, ability_mod(final.get("CON", 10)))
+        speed = self.model.race_details.get("speed", 30)
+        dark = self.model.race_details.get("darkvision", 0)
+        passive = 10 + skills.get("Perception", 0)
         data = {
             "meta": {
                 "name": self.model.name,
@@ -561,7 +644,7 @@ class ReviewScreen(ttk.Frame):
                 "saves": self.model.class_saves,
                 "hit_die": self.model.hit_die,
                 "skills": list(self.model.class_skill_picks),
-                "equipment": self.model.equipment_choices,
+                "equipment": [eq for eq in self.model.equipment_choices if eq],
             },
             "background": {
                 "languages": self.model.background_languages,
