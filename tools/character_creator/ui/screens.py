@@ -227,6 +227,8 @@ class BasicsScreen(ttk.Frame):
         for child in self.master.winfo_children():
             if hasattr(child, "_refresh_any_widgets"):
                 child._refresh_any_widgets()
+            if hasattr(child, "refresh_spells"):
+                child.refresh_spells()
             if hasattr(child, "refresh"):
                 child.refresh()
         self._save()
@@ -479,19 +481,25 @@ class BackgroundScreen(ttk.Frame):
         data = BACKGROUNDS.get(bg, {})
         text = []
         skills = data.get("skills", [])
-        tools = ", ".join(data.get("tools", []))
-        equipment = ", ".join(data.get("equipment", []))
+        tools = data.get("tools", [])
+        equipment = data.get("equipment", [])
         feature = data.get("feature", "")
         text.append(f"Skills: {', '.join(skills)}")
         if tools:
-            text.append(f"Tools: {tools}")
+            text.append(f"Tools: {', '.join(tools)}")
         if equipment:
-            text.append(f"Equipment: {equipment}")
+            text.append(f"Equipment: {', '.join(equipment)}")
         if feature:
             text.append(f"Feature: {feature}")
         self.info_var.set("\n".join(text))
         self.model.proficient_skills = set(skills)
         self.model.background_languages = []
+        self.model.background_details = {
+            "skills": skills,
+            "tools": tools,
+            "equipment": equipment,
+            "feature": feature,
+        }
         langs = data.get("languages", [])
         for child in self.lang_frame.winfo_children():
             child.destroy()
@@ -541,6 +549,7 @@ class BackgroundScreen(ttk.Frame):
         self.model.background_languages = []
         self.model.proficient_skills = set()
         self.model.background_languages_needed = 0
+        self.model.background_details = {}
         self.refresh_background()
         self.model.save_draft()
 
@@ -642,18 +651,32 @@ class ReviewScreen(ttk.Frame):
         languages = set(self.model.race_details.get("languages", [])) | set(
             self.model.background_languages
         )
+        equipment = [
+            *filter(None, self.model.equipment_choices),
+            *self.model.background_details.get("equipment", []),
+        ]
+        base_line = "Base Abilities: " + ", ".join(
+            f"{ab} {self.model.abilities_base[ab]} ({ability_mod(self.model.abilities_base[ab]):+d})"
+            for ab in ABILITIES
+        )
+        final_line = "Final Abilities: " + ", ".join(
+            f"{ab} {final[ab]} ({ability_mod(final[ab]):+d})" for ab in ABILITIES
+        )
         lines = [
             f"Name: {self.model.name} (Player: {self.model.player})",
             f"Race: {self.model.race} {self.model.subrace or ''}",
             f"Class: {self.model.klass} Level {self.model.level}",
             f"Background: {self.model.background} Alignment: {self.model.alignment}",
             "",
-            "Abilities: " + ", ".join(f"{ab} {final[ab]}" for ab in ABILITIES),
+            base_line,
+            final_line,
+            f"Race Features: {', '.join(self.model.race_details.get('features', []))}",
             f"Speed {speed} ft, Darkvision {dark} ft",
             f"Saving Throws: {', '.join(self.model.class_saves)} | Hit Die {self.model.hit_die}",
-            f"Proficient Skills: {', '.join(sorted(profs))}",
+            f"Class Skills: {', '.join(sorted(self.model.class_skill_picks))}",
+            f"Background Skills: {', '.join(sorted(self.model.proficient_skills))}",
             f"Languages: {', '.join(sorted(languages))}",
-            f"Equipment: {', '.join(filter(None, self.model.equipment_choices))}",
+            f"Equipment: {', '.join(equipment)}",
             f"HP {hp} | Initiative {init} | Passive Perception {passive}",
         ]
         if self.model.spellcasting:
@@ -707,6 +730,10 @@ class ReviewScreen(ttk.Frame):
         speed = self.model.race_details.get("speed", 30)
         dark = self.model.race_details.get("darkvision", 0)
         passive = 10 + skills.get("Perception", 0)
+        equipment = [
+            *filter(None, self.model.equipment_choices),
+            *self.model.background_details.get("equipment", []),
+        ]
         data = {
             "meta": {
                 "name": self.model.name,
@@ -728,6 +755,10 @@ class ReviewScreen(ttk.Frame):
                 "equipment": [eq for eq in self.model.equipment_choices if eq],
             },
             "background": {
+                "skills": list(self.model.background_details.get("skills", [])),
+                "tools": self.model.background_details.get("tools", []),
+                "equipment": self.model.background_details.get("equipment", []),
+                "feature": self.model.background_details.get("feature", ""),
                 "languages": self.model.background_languages,
             },
             "skills": skills,
@@ -740,6 +771,7 @@ class ReviewScreen(ttk.Frame):
             },
             "spells": self.model.spellcasting,
             "chosen_spells": self.model.chosen_spells,
+            "equipment": equipment,
         }
         from ..io.serialize import build_character, save_character, sanitize_filename
 

@@ -39,6 +39,7 @@ class Selections:
     # Background language selections (if background grants choices)
     background_languages: List[str] = field(default_factory=list)
     background_languages_needed: int = 0
+    background_details: Dict[str, object] = field(default_factory=dict)
     proficient_skills: Set[str] = field(default_factory=set)
     equipment_choices: List[str] = field(default_factory=list)
     equipment_rows: int = 0
@@ -69,13 +70,9 @@ class Character:
     """Final computed character output."""
 
     selections: Selections
-    abilities: Dict[str, int] = field(default_factory=dict)
-    skills: Dict[str, int] = field(default_factory=dict)
-    max_hp: int = 0
-    initiative: int = 0
-    passive_perception: int = 10
+    data: Dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, object]:
-        data = asdict(self)
-        data["selections"] = asdict(self.selections)
-        return data
+        out = dict(self.data)
+        out["selections"] = asdict(self.selections)
+        return out
