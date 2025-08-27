@@ -55,13 +55,26 @@ class Selections:
         self._root = root
 
     def _to_jsonable(self, obj: Any) -> Any:
+        """Recursively convert ``obj`` into JSON‑serialisable primitives."""
         if isinstance(obj, dict):
-            return {k: self._to_jsonable(v) for k, v in obj.items()}
+            return {k: self._to_jsonable(v) for k, v in obj.items() if not k.startswith("_")}
         if isinstance(obj, set):
             return sorted(self._to_jsonable(v) for v in obj)
         if isinstance(obj, list):
             return [self._to_jsonable(v) for v in obj]
-        return obj
+        # tk widgets/variables shouldn't be stored; if encountered just return str()
+        try:
+            json.dumps(obj)  # type: ignore
+            return obj
+        except Exception:  # pragma: no cover - defensive
+            return str(obj)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a dictionary of serialisable fields only."""
+        data = asdict(self)
+        data.pop("_root", None)
+        data.pop("_save_after", None)
+        return data
 
     def save_draft(self) -> None:
         """Persist current selections to a temporary draft file with debounce."""
@@ -74,7 +87,7 @@ class Selections:
 
     def _write_draft(self) -> None:
         try:
-            data = self._to_jsonable(asdict(self))
+            data = self._to_jsonable(self.to_dict())
             with open(_DRAFT_FILE, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, sort_keys=True, indent=2)
         except Exception as exc:  # pragma: no cover - debug aid
@@ -106,5 +119,5 @@ class Character:
 
     def to_dict(self) -> Dict[str, object]:
         out = dict(self.data)
-        out["selections"] = asdict(self.selections)
+        out["selections"] = self.selections.to_dict()
         return out

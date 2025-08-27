@@ -274,6 +274,7 @@ class AbilitiesScreen(ttk.Frame):
         row = ttk.Frame(self)
         row.pack(fill="x", pady=2)
         self.base_vars: Dict[str, tk.IntVar] = {}
+        self.spin_widgets: Dict[str, tk.Spinbox] = {}
         self.final_labels: Dict[str, ttk.Label] = {}
         for ab in ABILITIES:
             var = tk.IntVar(value=self.model.abilities_base[ab])
@@ -281,7 +282,9 @@ class AbilitiesScreen(ttk.Frame):
             self.base_vars[ab] = var
             frame = ttk.Frame(row)
             frame.pack(side="left", padx=4)
-            LabeledNumber(frame, ab, var).pack()
+            ln = LabeledNumber(frame, ab, var)
+            ln.pack()
+            self.spin_widgets[ab] = ln.spin
             lbl = ttk.Label(frame, text=f"Final: {var.get()}")
             lbl.pack()
             self.final_labels[ab] = lbl
@@ -295,6 +298,12 @@ class AbilitiesScreen(ttk.Frame):
             cb.pack(anchor="w")
             v.trace_add("write", self._on_any_change)
         self.any_frame.pack_forget()
+
+        # Info labels
+        self.points_var = tk.StringVar()
+        self.method_info = tk.StringVar()
+        ttk.Label(self, textvariable=self.points_var).pack(anchor="w")
+        ttk.Label(self, textvariable=self.method_info, foreground="blue").pack(anchor="w")
 
         self._refresh_any_widgets()
         self._recompute()
@@ -315,6 +324,13 @@ class AbilitiesScreen(ttk.Frame):
         self.model.abilities_base.update(defaults)
         for ab, var in self.base_vars.items():
             var.set(defaults[ab])
+        # reset spin ranges
+        if new == "manual":
+            for spin in self.spin_widgets.values():
+                spin.config(from_=1, to=20)
+        else:
+            for spin in self.spin_widgets.values():
+                spin.config(from_=8, to=15)
         self._recompute()
         self.model.save_draft()
 
@@ -338,7 +354,28 @@ class AbilitiesScreen(ttk.Frame):
         self.model.save_draft()
 
     def _on_ability_change(self, ab: str, var: tk.IntVar) -> None:
+        val = var.get()
+        method = self.model.ability_method
+        if method in ("point", "standard"):
+            if val < 8:
+                val = 8
+            if val > 15:
+                val = 15
+            var.set(val)
+        elif method == "manual":
+            if val < 1:
+                val = 1
+            if val > 20:
+                val = 20
+            var.set(val)
+        prev = self.model.abilities_base[ab]
         self.model.abilities_base[ab] = var.get()
+        if method == "point":
+            from ..srd_data import POINT_BUY_COST, POINT_BUY_BUDGET
+            total = sum(POINT_BUY_COST[self.model.abilities_base[a]] for a in ABILITIES)
+            if total > POINT_BUY_BUDGET:
+                var.set(prev)
+                self.model.abilities_base[ab] = prev
         self._recompute()
         self.model.save_draft()
 
@@ -351,6 +388,44 @@ class AbilitiesScreen(ttk.Frame):
         self.model.abilities_final = apply_asi(self.model.abilities_base, asi)
         for ab, lbl in self.final_labels.items():
             lbl.configure(text=f"Final: {self.model.abilities_final.get(ab, 0)}")
+
+        # Method-specific helpers
+        method = self.model.ability_method
+        if method == "point":
+            from ..srd_data import POINT_BUY_COST, POINT_BUY_BUDGET
+            total = sum(POINT_BUY_COST[self.model.abilities_base[a]] for a in ABILITIES)
+            remaining = POINT_BUY_BUDGET - total
+            self.points_var.set(f"Points remaining: {remaining}")
+            # adjust upper bounds to prevent overspend
+            for ab in ABILITIES:
+                cur = self.model.abilities_base[ab]
+                max_val = cur
+                rem = remaining
+                while max_val < 15:
+                    diff = POINT_BUY_COST[max_val + 1] - POINT_BUY_COST[max_val]
+                    if diff > rem:
+                        break
+                    rem -= diff
+                    max_val += 1
+                self.spin_widgets[ab].config(from_=8, to=max_val)
+            self.method_info.set("Point-buy: distribute 27 points among scores 8–15.")
+        elif method == "standard":
+            from ..srd_data import STANDARD_ARRAY
+            from ..logic.validators import validate_standard_array
+            errors = validate_standard_array(self.model.abilities_base)
+            if errors:
+                self.points_var.set("Standard array incomplete")
+            else:
+                self.points_var.set("Standard array complete")
+            self.method_info.set("Assign 15,14,13,12,10,8 once each.")
+            for spin in self.spin_widgets.values():
+                spin.config(from_=8, to=15)
+        else:
+            self.points_var.set("")
+            self.method_info.set("Manual entry (1–20)")
+            for spin in self.spin_widgets.values():
+                spin.config(from_=1, to=20)
+
         for child in self.master.winfo_children():
             if hasattr(child, "refresh_spells"):
                 child.refresh_spells()
@@ -398,7 +473,8 @@ class ClassScreen(ttk.Frame):
             child.destroy()
         info = CLASS_SKILL_CHOICES.get(klass, {"choose": 0, "from": []})
         self.choose = info.get("choose", 0)
-        ttk.Label(self.skills_frame, text=f"Choose {self.choose} skills:").pack(anchor="w")
+        ttk.Label(self.skills_frame, text=f"Choose {self.choose} skills from the list below:").pack(anchor="w")
+        ttk.Label(self.skills_frame, text="Background skills are added on top.").pack(anchor="w")
         ttk.Label(self.skills_frame, textvariable=self.skill_count_var).pack(anchor="w")
         self.skill_vars = {}
         self.model.class_skill_picks = []
@@ -416,6 +492,11 @@ class ClassScreen(ttk.Frame):
         rows = CLASS_STARTING_EQUIPMENT.get(klass, [])
         self.model.equipment_rows = len(rows)
         self.model.equipment_choices = ["" for _ in rows]
+        if rows:
+            ttk.Label(
+                self.equip_frame,
+                text="Pick exactly one option from each equipment row:",
+            ).pack(anchor="w")
         for idx, options in enumerate(rows, start=1):
             ttk.Label(self.equip_frame, text=f"Row {idx}:").pack(anchor="w")
             v = tk.StringVar()
@@ -522,8 +603,11 @@ class BackgroundScreen(ttk.Frame):
             self.model.background_languages = list(langs)
             if langs:
                 ttk.Label(
-                    self.lang_frame, text="Languages: " + ", ".join(langs)
+                    self.lang_frame,
+                    text="Background grants: " + ", ".join(langs),
                 ).pack(anchor="w")
+            else:
+                ttk.Label(self.lang_frame, text="No additional languages").pack(anchor="w")
         self.model.save_draft()
     def _on_lang_change(self, *_):
         seen = set()
@@ -563,6 +647,11 @@ class SpellsScreen(ttk.Frame):
         self.spell_frame = ttk.Frame(self)
         self.spell_frame.pack(anchor="w", pady=4)
         self.spell_vars: List[tuple[str, tk.BooleanVar]] = []
+        custom_row = ttk.Frame(self)
+        custom_row.pack(anchor="w", pady=4)
+        self.custom_var = tk.StringVar()
+        ttk.Entry(custom_row, textvariable=self.custom_var, width=20).pack(side="left")
+        ttk.Button(custom_row, text="Add custom spell", command=self._add_custom_spell).pack(side="left", padx=4)
         ttk.Button(self, text="Reset Spells", command=self._reset).pack(anchor="w", pady=2)
         self.refresh_spells()
 
@@ -574,6 +663,14 @@ class SpellsScreen(ttk.Frame):
         ability = CLASS_SPELLCASTING_ABILITY.get(klass)
         if not ability:
             self.info_var.set("Selected class has no spellcasting.")
+            self.model.spellcasting = {}
+            return
+        # gating by level
+        min_level = 1
+        if klass in ("Paladin", "Ranger"):
+            min_level = 2
+        if self.model.level < min_level:
+            self.info_var.set(f"{klass}s gain spells at level {min_level}.")
             self.model.spellcasting = {}
             return
         ability_score = self.model.abilities_final.get(ability, self.model.abilities_base.get(ability, 10))
@@ -601,7 +698,8 @@ class SpellsScreen(ttk.Frame):
             f"Casting Ability: {ability} | Save DC {dc} | Attack {attack}"
         )
         spells = SRD_SPELL_LISTS_MIN.get(klass, [])
-        for sp in spells:
+        all_spells = sorted(set(spells) | set(self.model.chosen_spells))
+        for sp in all_spells:
             var = tk.BooleanVar(value=sp in self.model.chosen_spells)
             chk = ttk.Checkbutton(
                 self.spell_frame, text=sp, variable=var, command=self._on_spell_change
@@ -619,6 +717,15 @@ class SpellsScreen(ttk.Frame):
             if hasattr(child, "refresh"):
                 child.refresh()
         self.model.save_draft()
+
+    def _add_custom_spell(self) -> None:
+        name = self.custom_var.get().strip()
+        if not name:
+            return
+        if name not in self.model.chosen_spells:
+            self.model.chosen_spells.append(name)
+        self.custom_var.set("")
+        self.refresh_spells()
 
     def _reset(self) -> None:
         self.model.chosen_spells = []
