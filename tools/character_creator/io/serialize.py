@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict
@@ -17,8 +18,9 @@ def build_character(model: Selections, derived: Dict[str, Any]) -> Character:
 
 def save_character(path: Path | str, char: Character) -> None:
     data = char.to_dict()
+    data["schema_version"] = 1
     with open(path, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2)
+        json.dump(data, fh, indent=2, sort_keys=True)
 
 
 def load_character(path: Path | str) -> Character:
@@ -26,3 +28,11 @@ def load_character(path: Path | str) -> Character:
         data = json.load(fh)
     selections = Selections(**data.pop("selections"))
     return Character(selections=selections, **data)
+
+
+def sanitize_filename(name: str) -> str:
+    """Return a safe filename derived from ``name``."""
+    base = re.sub(r"[^A-Za-z0-9_-]", "_", name.strip()) or "character"
+    if not base.endswith("_character"):
+        base += "_character"
+    return base + ".json"

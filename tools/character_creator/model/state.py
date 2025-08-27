@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
+import json
+from pathlib import Path
 from typing import Optional, Set, List, Dict
 
 from ..srd_data import ABILITIES
+
+_DRAFT_FILE = Path(__file__).resolve().parent / "draft.json"
 
 
 @dataclass
@@ -40,6 +44,24 @@ class Selections:
     equipment_rows: int = 0
     chosen_spells: List[str] = field(default_factory=list)
     spellcasting: Dict[str, object] = field(default_factory=dict)
+
+    def save_draft(self) -> None:
+        """Persist current selections to a temporary draft file."""
+        with open(_DRAFT_FILE, "w", encoding="utf-8") as fh:
+            json.dump(asdict(self), fh, sort_keys=True, indent=2)
+
+    @staticmethod
+    def load_draft() -> Optional["Selections"]:
+        if not _DRAFT_FILE.exists():
+            return None
+        with open(_DRAFT_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return Selections(**data)
+
+    @staticmethod
+    def clear_draft() -> None:
+        if _DRAFT_FILE.exists():
+            _DRAFT_FILE.unlink()
 
 
 @dataclass

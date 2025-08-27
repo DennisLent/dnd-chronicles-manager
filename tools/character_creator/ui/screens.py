@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Dict, List
@@ -57,7 +56,7 @@ class BasicsScreen(ttk.Frame):
         ent_player = ttk.Entry(self, textvariable=self.var_player)
         ent_player.grid(row=0, column=1, sticky="ew", padx=4, pady=2)
         self.var_player.trace_add(
-            "write", lambda *_: setattr(self.model, "player", self.var_player.get())
+            "write", lambda *_: (setattr(self.model, "player", self.var_player.get()), self._save())
         )
 
         # Character name
@@ -68,7 +67,7 @@ class BasicsScreen(ttk.Frame):
         ent_name = ttk.Entry(self, textvariable=self.var_name)
         ent_name.grid(row=1, column=1, sticky="ew", padx=4, pady=2)
         self.var_name.trace_add(
-            "write", lambda *_: setattr(self.model, "name", self.var_name.get())
+            "write", lambda *_: (setattr(self.model, "name", self.var_name.get()), self._save())
         )
 
         # Race selection
@@ -126,12 +125,15 @@ class BasicsScreen(ttk.Frame):
         )
         cb_align.grid(row=7, column=1, sticky="ew", padx=4, pady=2)
         self.var_align.trace_add(
-            "write", lambda *_: setattr(self.model, "alignment", self.var_align.get())
+            "write", lambda *_: (setattr(self.model, "alignment", self.var_align.get()), self._save())
         )
 
         # Race detail display
         self.lbl_race_info = ttk.Label(self, justify="left", wraplength=350)
         self.lbl_race_info.grid(row=8, column=0, columnspan=2, sticky="w", padx=4, pady=4)
+        ttk.Button(self, text="Reset Basics", command=self._reset).grid(
+            row=9, column=0, columnspan=2, pady=4
+        )
         self._update_race_display()
 
     def _on_race_change(self, *_):
@@ -155,6 +157,7 @@ class BasicsScreen(ttk.Frame):
                 child.refresh_spells()
             if hasattr(child, "refresh"):
                 child.refresh()
+        self._save()
 
     def _on_background_change(self, *_):
         self.model.background = self.var_bg.get()
@@ -163,6 +166,7 @@ class BasicsScreen(ttk.Frame):
                 child.refresh_background()
             if hasattr(child, "refresh"):
                 child.refresh()
+        self._save()
 
     def _on_level_change(self, *_):
         try:
@@ -174,10 +178,12 @@ class BasicsScreen(ttk.Frame):
                 child.refresh_spells()
             if hasattr(child, "refresh"):
                 child.refresh()
+        self._save()
 
     def _on_subrace_change(self, *_):
         self.model.subrace = self.var_sub.get() or None
         self._update_race_display()
+        self._save()
 
     def _update_race_display(self) -> None:
         race = self.model.race
@@ -223,8 +229,22 @@ class BasicsScreen(ttk.Frame):
                 child._refresh_any_widgets()
             if hasattr(child, "refresh"):
                 child.refresh()
+        self._save()
 
+    def _reset(self) -> None:
+        self.var_player.set("")
+        self.var_name.set("")
+        self.var_race.set("")
+        self.var_sub.set("")
+        self.var_class.set("")
+        self.var_level.set(1)
+        self.var_bg.set("")
+        self.var_align.set("True Neutral")
+        self.model.race_details = {}
+        self._save()
 
+    def _save(self) -> None:
+        self.model.save_draft()
 class AbilitiesScreen(ttk.Frame):
     def __init__(self, master, model: Selections):
         super().__init__(master)
@@ -276,6 +296,7 @@ class AbilitiesScreen(ttk.Frame):
 
         self._refresh_any_widgets()
         self._recompute()
+        ttk.Button(self, text="Reset Abilities", command=self._reset).pack(anchor="w", pady=4)
 
     def _on_method_change(self) -> None:
         new = self.method_var.get()
@@ -293,6 +314,7 @@ class AbilitiesScreen(ttk.Frame):
         for ab, var in self.base_vars.items():
             var.set(defaults[ab])
         self._recompute()
+        self.model.save_draft()
 
     def _refresh_any_widgets(self) -> None:
         asi = self.model.race_details.get("asi", {})
@@ -311,10 +333,12 @@ class AbilitiesScreen(ttk.Frame):
         else:
             self.model.asi_any_choices = []
         self._recompute()
+        self.model.save_draft()
 
     def _on_ability_change(self, ab: str, var: tk.IntVar) -> None:
         self.model.abilities_base[ab] = var.get()
         self._recompute()
+        self.model.save_draft()
 
     def _recompute(self) -> None:
         asi = dict(self.model.race_details.get("asi", {}))
@@ -330,6 +354,18 @@ class AbilitiesScreen(ttk.Frame):
                 child.refresh_spells()
             if hasattr(child, "refresh"):
                 child.refresh()
+        self.model.save_draft()
+
+    def _reset(self) -> None:
+        self.method_var.set("manual")
+        self.model.ability_method = "manual"
+        for ab, var in self.base_vars.items():
+            var.set(10)
+        for v in self.any_vars:
+            v.set("")
+        self.model.asi_any_choices = []
+        self._recompute()
+        self.model.save_draft()
 
 
 class ClassScreen(ttk.Frame):
@@ -341,9 +377,12 @@ class ClassScreen(ttk.Frame):
         self.skills_frame = ttk.Frame(self)
         self.skills_frame.pack(anchor="w", pady=4)
         self.skill_vars: Dict[str, tk.BooleanVar] = {}
+        self.skill_count_var = tk.StringVar()
         self.equip_frame = ttk.Frame(self)
         self.equip_frame.pack(anchor="w", pady=4)
         self.equip_vars: List[tk.StringVar] = []
+        self.equip_info_var = tk.StringVar()
+        ttk.Button(self, text="Reset Class", command=self._reset).pack(anchor="w", pady=2)
         self.refresh_class()
 
     def refresh_class(self) -> None:
@@ -358,6 +397,7 @@ class ClassScreen(ttk.Frame):
         info = CLASS_SKILL_CHOICES.get(klass, {"choose": 0, "from": []})
         self.choose = info.get("choose", 0)
         ttk.Label(self.skills_frame, text=f"Choose {self.choose} skills:").pack(anchor="w")
+        ttk.Label(self.skills_frame, textvariable=self.skill_count_var).pack(anchor="w")
         self.skill_vars = {}
         self.model.class_skill_picks = set()
         for sk in info.get("from", []):
@@ -374,7 +414,8 @@ class ClassScreen(ttk.Frame):
         rows = CLASS_STARTING_EQUIPMENT.get(klass, [])
         self.model.equipment_rows = len(rows)
         self.model.equipment_choices = ["" for _ in rows]
-        for options in rows:
+        for idx, options in enumerate(rows, start=1):
+            ttk.Label(self.equip_frame, text=f"Row {idx}:").pack(anchor="w")
             v = tk.StringVar()
             cb = ttk.Combobox(
                 self.equip_frame, textvariable=v, values=options, state="readonly"
@@ -382,6 +423,7 @@ class ClassScreen(ttk.Frame):
             cb.pack(anchor="w")
             v.trace_add("write", self._on_equip_change)
             self.equip_vars.append(v)
+        ttk.Label(self.equip_frame, textvariable=self.equip_info_var).pack(anchor="w")
         self._on_equip_change()
 
     def _on_skill_change(self) -> None:
@@ -392,15 +434,31 @@ class ClassScreen(ttk.Frame):
                 self.skill_vars[sk].set(False)
             picks = [sk for sk, var in self.skill_vars.items() if var.get()]
         self.model.class_skill_picks = set(picks)
+        self.skill_count_var.set(f"{len(picks)} of {self.choose} chosen")
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
                 child.refresh()
+        self.model.save_draft()
+
+    def _reset(self) -> None:
+        self.model.class_skill_picks = set()
+        self.model.equipment_choices = []
+        self.model.class_saves = []
+        self.model.hit_die = ""
+        self.refresh_class()
+        self.model.save_draft()
 
     def _on_equip_change(self, *_):
         self.model.equipment_choices = [v.get() for v in self.equip_vars]
+        missing = sum(1 for v in self.equip_vars if not v.get())
+        if missing:
+            self.equip_info_var.set(f"{missing} of {self.model.equipment_rows} remaining")
+        else:
+            self.equip_info_var.set("All selected")
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
                 child.refresh()
+        self.model.save_draft()
 
 
 class BackgroundScreen(ttk.Frame):
@@ -413,6 +471,7 @@ class BackgroundScreen(ttk.Frame):
         self.lang_frame.pack(anchor="w", pady=4)
         self.lang_vars: List[tk.StringVar] = []
         self.lang_info_var = tk.StringVar()
+        ttk.Button(self, text="Reset Background", command=self._reset).pack(anchor="w", pady=2)
         self.refresh_background()
 
     def refresh_background(self) -> None:
@@ -457,7 +516,7 @@ class BackgroundScreen(ttk.Frame):
                 ttk.Label(
                     self.lang_frame, text="Languages: " + ", ".join(langs)
                 ).pack(anchor="w")
-
+        self.model.save_draft()
     def _on_lang_change(self, *_):
         seen = set()
         for v in self.lang_vars:
@@ -475,6 +534,15 @@ class BackgroundScreen(ttk.Frame):
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
                 child.refresh()
+        self.model.save_draft()
+
+    def _reset(self) -> None:
+        self.model.background = ""
+        self.model.background_languages = []
+        self.model.proficient_skills = set()
+        self.model.background_languages_needed = 0
+        self.refresh_background()
+        self.model.save_draft()
 
 
 class SpellsScreen(ttk.Frame):
@@ -486,6 +554,7 @@ class SpellsScreen(ttk.Frame):
         self.spell_frame = ttk.Frame(self)
         self.spell_frame.pack(anchor="w", pady=4)
         self.spell_vars: List[tuple[str, tk.BooleanVar]] = []
+        ttk.Button(self, text="Reset Spells", command=self._reset).pack(anchor="w", pady=2)
         self.refresh_spells()
 
     def refresh_spells(self) -> None:
@@ -533,12 +602,20 @@ class SpellsScreen(ttk.Frame):
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
                 child.refresh()
+        self.model.save_draft()
 
     def _on_spell_change(self) -> None:
         self.model.chosen_spells = [sp for sp, var in self.spell_vars if var.get()]
         for child in self.master.winfo_children():
             if hasattr(child, "refresh"):
                 child.refresh()
+        self.model.save_draft()
+
+    def _reset(self) -> None:
+        self.model.chosen_spells = []
+        self.model.spellcasting = {}
+        self.refresh_spells()
+        self.model.save_draft()
 
 
 class ReviewScreen(ttk.Frame):
@@ -547,6 +624,8 @@ class ReviewScreen(ttk.Frame):
         self.model = model
         self.text = tk.Text(self, width=80, height=20)
         self.text.pack(fill="both", expand=True)
+        self.error_var = tk.StringVar()
+        ttk.Label(self, textvariable=self.error_var, foreground="red").pack()
         ttk.Button(self, text="Export", command=self._export).pack(pady=4)
         self.refresh()
 
@@ -616,8 +695,10 @@ class ReviewScreen(ttk.Frame):
                 "Pick 1 option in Equipment row(s) " + ", ".join(missing_rows)
             )
         if errors:
+            self.error_var.set("; ".join(errors))
             messagebox.showerror("Validation", "\n".join(errors))
             return
+        self.error_var.set("")
         final = self.model.abilities_final or self.model.abilities_base
         profs = set(self.model.proficient_skills) | set(self.model.class_skill_picks)
         skills = compute_skill_bonuses(final, profs, self.model.level)
@@ -660,8 +741,11 @@ class ReviewScreen(ttk.Frame):
             "spells": self.model.spellcasting,
             "chosen_spells": self.model.chosen_spells,
         }
-        fname = f"{self.model.name.replace(' ', '_')}_character.json"
-        with open(fname, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        from ..io.serialize import build_character, save_character, sanitize_filename
+
+        char = build_character(self.model, data)
+        fname = sanitize_filename(self.model.name)
+        save_character(fname, char)
+        Selections.clear_draft()
         messagebox.showinfo("Export", f"Character saved to {fname}")
 
