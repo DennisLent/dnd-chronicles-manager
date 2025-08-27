@@ -6,7 +6,14 @@ import tkinter as tk
 from tkinter import ttk
 
 from .model.state import Selections
-from .ui.screens import AbilitiesScreen, BasicsScreen, ReviewScreen
+from .ui.screens import (
+    AbilitiesScreen,
+    BasicsScreen,
+    ClassScreen,
+    BackgroundScreen,
+    SpellsScreen,
+    ReviewScreen,
+)
 from .ui.styles import setup_styles
 
 
@@ -22,6 +29,9 @@ def main() -> None:
     nb.pack(fill="both", expand=True)
     nb.add(BasicsScreen(nb, model), text="Basics")
     nb.add(AbilitiesScreen(nb, model), text="Abilities")
+    nb.add(ClassScreen(nb, model), text="Class")
+    nb.add(BackgroundScreen(nb, model), text="Background")
+    nb.add(SpellsScreen(nb, model), text="Spells")
     nb.add(ReviewScreen(nb, model), text="Review")
 
     root.mainloop()
