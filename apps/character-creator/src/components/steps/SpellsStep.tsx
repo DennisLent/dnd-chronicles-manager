@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Character, SpellData } from '@/types/character';
-import { CLASSES, SPELLS } from '@/data/staticRules';
+import { CLASSES, SPELLS, SPELL_SLOTS_FULL_CASTER, HALF_CASTER_EFFECTIVE_LEVEL, WARLOCK_PACT_SLOTS, CLASS_SPELL_LISTS_MIN } from '@/data/staticRules';
 import { Sparkles, Plus, BookOpen, Wand2 } from 'lucide-react';
 
 interface SpellsStepProps {
@@ -46,6 +46,33 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
     (classData.spellcasting?.progression === 'warlock' && level >= 1)
   );
 
+  const spellSlots = (() => {
+    if (!hasSpellcasting) return null;
+    const prog = classData!.spellcasting!.progression;
+    if (prog === 'full') {
+      return { type: 'full' as const, slots: SPELL_SLOTS_FULL_CASTER[level] };
+    }
+    if (prog === 'half') {
+      const eff = HALF_CASTER_EFFECTIVE_LEVEL[level];
+      return { type: 'half' as const, slots: SPELL_SLOTS_FULL_CASTER[eff] };
+    }
+    if (prog === 'warlock') {
+      const [slots, slotLevel] = WARLOCK_PACT_SLOTS[level];
+      return { type: 'warlock' as const, pact: { slots, slotLevel } };
+    }
+    return null;
+  })();
+
+  // Limit how many leveled spells can be chosen (cantrips excluded)
+  const maxLeveledSpells = (() => {
+    if (!spellSlots) return 0;
+    // warlock pact magic: limit equals number of pact slots
+    if (spellSlots.type === 'warlock') return spellSlots.pact!.slots;
+    // full/half casters: sum slots across levels
+    return (spellSlots.slots || []).reduce((a, b) => a + b, 0);
+  })();
+  const chosenLeveledCount = chosenSpells.filter(s => s.level > 0).length;
+
   const handleSpellToggle = (spell: SpellData) => {
     const isSelected = chosenSpells.some(s => s.name === spell.name);
     let newSpells;
@@ -53,6 +80,9 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
     if (isSelected) {
       newSpells = chosenSpells.filter(s => s.name !== spell.name);
     } else {
+      if (spell.level > 0 && chosenLeveledCount >= maxLeveledSpells) {
+        return; // limit reached for leveled spells
+      }
       newSpells = [...chosenSpells, spell];
     }
 
@@ -82,7 +112,13 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
   };
 
   const getSpellsByLevel = (level: number) => {
-    return SPELLS.filter(spell => spell.level === level);
+    const className = classData?.name || '';
+    const allowed = CLASS_SPELL_LISTS_MIN[className];
+    return SPELLS.filter(spell => {
+      if (spell.level !== level) return false;
+      if (!allowed) return true;
+      return allowed.includes(spell.name.toLowerCase());
+    });
   };
 
   if (!hasSpellcasting) {
@@ -109,7 +145,7 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
             Previous: Equipment
           </Button>
           <Button onClick={onNext}>
-            Next: Review
+            Next: Details
           </Button>
         </div>
       </div>
@@ -142,7 +178,7 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
             Previous: Equipment
           </Button>
           <Button onClick={onNext}>
-            Next: Review
+            Next: Details
           </Button>
         </div>
       </div>
@@ -164,7 +200,7 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
 
       {/* Spell Stats */}
       <Card className="p-4">
-        <div className="grid grid-cols-3 gap-4 text-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
           <div>
             <Label className="text-xs text-muted-foreground">Spell Save DC</Label>
             <div className="text-lg font-bold">
@@ -184,6 +220,30 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
             </div>
           </div>
         </div>
+        {spellSlots && (
+          <div className="mt-4 text-sm text-left">
+            {spellSlots.type === 'warlock' ? (
+              <div>
+                <Label className="text-xs text-muted-foreground">Pact Magic</Label>
+                <div>Slots: {spellSlots.pact!.slots} • Slot Level: {spellSlots.pact!.slotLevel}</div>
+                <div className="text-xs text-muted-foreground mt-1">Leveled spells selected: {chosenSpells.filter(s => s.level > 0).length} / {spellSlots.pact!.slots}</div>
+              </div>
+            ) : (
+              <div>
+                <Label className="text-xs text-muted-foreground">Spell Slots by Level</Label>
+                <div className="mt-1 grid grid-cols-9 gap-1 text-center">
+                  {spellSlots.slots!.map((n, i) => (
+                    <div key={i} className="px-2 py-1 rounded bg-muted/40">
+                      <div className="text-[10px] text-muted-foreground">{i+1}</div>
+                      <div className="font-semibold">{n}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Leveled spells selected: {chosenSpells.filter(s => s.level > 0).length} / { (spellSlots.slots || []).reduce((a,b)=>a+b,0) }</div>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Selected Spells */}
@@ -286,15 +346,16 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
               <div className="grid gap-2">
                 {getSpellsByLevel(level).map((spell, index) => {
                   const isSelected = chosenSpells.some(s => s.name === spell.name);
+                  const atCap = spell.level > 0 && !isSelected && chosenLeveledCount >= maxLeveledSpells;
                   return (
                     <div
                       key={index}
-                      className={`p-3 border rounded cursor-pointer transition-colors ${
-                        isSelected 
-                          ? 'border-primary bg-primary/10' 
-                          : 'border-border hover:border-primary/50'
+                      className={`p-3 border rounded transition-colors ${
+                        isSelected
+                          ? 'border-primary bg-primary/10'
+                          : atCap ? 'border-border opacity-60 cursor-not-allowed' : 'border-border hover:border-primary/50 cursor-pointer'
                       }`}
-                      onClick={() => handleSpellToggle(spell)}
+                      onClick={() => { if (!atCap) handleSpellToggle(spell); }}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -303,8 +364,8 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
                             {spell.school}
                           </div>
                         </div>
-                        <Badge variant={isSelected ? "default" : "secondary"}>
-                          {isSelected ? 'Selected' : 'Available'}
+                        <Badge variant={isSelected ? 'default' : atCap ? 'outline' : 'secondary'}>
+                          {isSelected ? 'Selected' : atCap ? 'Limit Reached' : 'Available'}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mt-2">
@@ -325,7 +386,7 @@ export const SpellsStep: React.FC<SpellsStepProps> = ({
           Previous: Equipment
         </Button>
         <Button onClick={onNext}>
-          Next: Review
+          Next: Details
         </Button>
       </div>
     </div>

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Character } from '@/types/character';
-import { RACES, CLASSES, BACKGROUNDS } from '@/data/staticRules';
+import { RACES, CLASSES, BACKGROUNDS, ALIGNMENTS } from '@/data/staticRules';
 
 interface BasicsStepProps {
   character: Partial<Character>;
@@ -114,7 +114,7 @@ export const BasicsStep: React.FC<BasicsStepProps> = ({ character, updateCharact
                   <SelectValue placeholder="Select alignment" />
                 </SelectTrigger>
                 <SelectContent>
-                  {['Lawful Good', 'Neutral Good', 'Chaotic Good', 'Lawful Neutral', 'True Neutral', 'Chaotic Neutral', 'Lawful Evil', 'Neutral Evil', 'Chaotic Evil'].map(alignment => (
+                  {ALIGNMENTS.map(alignment => (
                     <SelectItem key={alignment} value={alignment}>
                       {alignment}
                     </SelectItem>

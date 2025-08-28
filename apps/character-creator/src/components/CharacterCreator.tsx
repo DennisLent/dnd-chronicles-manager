@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sword, User, Backpack, Sparkles, Eye } from 'lucide-react';
+import { Sword, User, Backpack, Sparkles, Eye, FileText } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Character } from '@/types/character';
 import { WizardNavigation } from './WizardNavigation';
@@ -8,6 +8,7 @@ import { BasicsStep } from './steps/BasicsStep';
 import { AbilitiesStep } from './steps/AbilitiesStep';
 import { EquipmentStep } from './steps/EquipmentStep';
 import { SpellsStep } from './steps/SpellsStep';
+import { DetailsStep } from './steps/DetailsStep';
 import { ReviewStep } from './steps/ReviewStep';
 
 const WIZARD_STEPS = [
@@ -15,6 +16,7 @@ const WIZARD_STEPS = [
   { id: 'abilities', label: 'Abilities', icon: Sword },
   { id: 'equipment', label: 'Equipment', icon: Backpack },
   { id: 'spells', label: 'Spells', icon: Sparkles },
+  { id: 'details', label: 'Details', icon: FileText },
   { id: 'review', label: 'Review', icon: Eye }
 ] as const;
 
@@ -97,8 +99,17 @@ const CharacterCreator: React.FC = () => {
           <SpellsStep 
             character={character} 
             updateCharacter={updateCharacter}
-            onNext={() => setCurrentStep('review')}
+            onNext={() => setCurrentStep('details')}
             onPrevious={() => setCurrentStep('equipment')}
+          />
+        );
+      case 'details':
+        return (
+          <DetailsStep
+            character={character}
+            updateCharacter={updateCharacter}
+            onNext={() => setCurrentStep('review')}
+            onPrevious={() => setCurrentStep('spells')}
           />
         );
       case 'review':
