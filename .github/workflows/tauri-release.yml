@@ -1,0 +1,53 @@
+name: Build & Release (Tauri)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix: { os: [ubuntu-latest, windows-latest, macos-latest] }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/character-creator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: 'pnpm' }
+      - uses: pnpm/action-setup@v4
+        with: { version: 9, run_install: true }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf \
+            libfuse2 desktop-file-utils
+      - name: Build
+        run: pnpm tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-bundles
+          path: apps/character-creator/src-tauri/target/release/bundle/**
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+          draft: false
+          prerelease: false
