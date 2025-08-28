@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields
 import json
 from pathlib import Path
 from typing import Any, Optional, List, Dict
@@ -70,10 +70,12 @@ class Selections:
             return str(obj)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return a dictionary of serialisable fields only."""
-        data = asdict(self)
-        data.pop("_root", None)
-        data.pop("_save_after", None)
+        """Return a dictionary of serialisable fields only without deep copying Tk roots."""
+        data: Dict[str, Any] = {}
+        for f in fields(self):
+            if f.name.startswith("_"):
+                continue
+            data[f.name] = getattr(self, f.name)
         return data
 
     def save_draft(self) -> None:

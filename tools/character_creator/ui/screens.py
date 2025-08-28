@@ -271,6 +271,10 @@ class AbilitiesScreen(ttk.Frame):
                 command=self._on_method_change,
             ).pack(side="left", padx=4)
 
+        # status helpers need to exist before traces fire
+        self.points_var = tk.StringVar()
+        self.method_info = tk.StringVar()
+
         row = ttk.Frame(self)
         row.pack(fill="x", pady=2)
         self.base_vars: Dict[str, tk.IntVar] = {}
@@ -300,8 +304,6 @@ class AbilitiesScreen(ttk.Frame):
         self.any_frame.pack_forget()
 
         # Info labels
-        self.points_var = tk.StringVar()
-        self.method_info = tk.StringVar()
         ttk.Label(self, textvariable=self.points_var).pack(anchor="w")
         ttk.Label(self, textvariable=self.method_info, foreground="blue").pack(anchor="w")
 
