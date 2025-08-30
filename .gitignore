@@ -18,7 +18,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Limit lib/ ignore to repo root; allow app src/lib
+/lib/
+!apps/character-creator/src/lib/
+!apps/character-creator/src/lib/**
 lib64/
 parts/
 sdist/

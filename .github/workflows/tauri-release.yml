@@ -60,6 +60,7 @@ jobs:
           echo "tsc --showConfig excerpt:"
           pnpm exec tsc --showConfig -p tsconfig.app.json | grep -nE 'moduleResolution|module|baseUrl|paths' -n -A2 -B2 || true
           echo "List src/lib"
+          ls -la src || true
           ls -la src/lib || true
 
       - name: Build Tauri bundle
