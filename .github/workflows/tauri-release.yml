@@ -50,6 +50,16 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      - name: Debug TS config (paths)
+        if: failure() && runner.os == 'Linux'
+        run: |
+          echo "Showing tsconfig.app.json compilerOptions.paths"
+          node -e "console.log(require('./tsconfig.app.json').compilerOptions?.paths)"
+          echo "tsc --showConfig excerpt:"
+          pnpm exec tsc --showConfig -p tsconfig.app.json | sed -n '1,160p'
+          echo "List src/lib"
+          ls -la src/lib || true
+
       - name: Build Tauri bundle
         run: pnpm tauri build
         env:
