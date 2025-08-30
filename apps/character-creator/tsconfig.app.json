@@ -8,8 +8,8 @@
     "module": "ESNext",
     "skipLibCheck": true,
 
-    /* Module resolution for TS typecheck */
-    "moduleResolution": "nodenext",
+    /* Use Node resolution to honor paths + extensionless */
+    "moduleResolution": "node",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
     "moduleDetection": "force",
