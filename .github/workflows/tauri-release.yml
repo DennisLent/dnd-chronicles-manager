@@ -60,6 +60,7 @@ jobs:
         with:
           name: ${{ runner.os }}-bundles
           path: apps/character-creator/src-tauri/target/release/bundle/**
+          if-no-files-found: error
 
   release:
     needs: build
@@ -69,6 +70,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/**/*
