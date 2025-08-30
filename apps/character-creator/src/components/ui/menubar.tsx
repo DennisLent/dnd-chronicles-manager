@@ -4,15 +4,14 @@ import { Check, ChevronRight, Circle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const MenubarMenu = MenubarPrimitive.Menu
-
-const MenubarGroup = MenubarPrimitive.Group
-
-const MenubarPortal = MenubarPrimitive.Portal
-
-const MenubarSub = MenubarPrimitive.Sub
-
-const MenubarRadioGroup = MenubarPrimitive.RadioGroup
+// ---- Explicitly typed aliases to avoid TS2742 deep type names ----
+export const MenubarMenu: typeof MenubarPrimitive.Menu = MenubarPrimitive.Menu
+export const MenubarGroup: typeof MenubarPrimitive.Group = MenubarPrimitive.Group
+export const MenubarPortal: typeof MenubarPrimitive.Portal = MenubarPrimitive.Portal
+export const MenubarSub: typeof MenubarPrimitive.Sub = MenubarPrimitive.Sub
+export const MenubarRadioGroup: typeof MenubarPrimitive.RadioGroup =
+  MenubarPrimitive.RadioGroup
+// ------------------------------------------------------------------
 
 const Menubar = React.forwardRef<
   React.ElementRef<typeof MenubarPrimitive.Root>,
@@ -95,7 +94,7 @@ const MenubarContent = React.forwardRef<
         alignOffset={alignOffset}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          "z-50 min-w=[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           className
         )}
         {...props}
@@ -212,23 +211,18 @@ const MenubarShortcut = ({
     />
   )
 }
-MenubarShortcut.displayname = "MenubarShortcut"
+MenubarShortcut.displayName = "MenubarShortcut"
 
 export {
   Menubar,
-  MenubarMenu,
   MenubarTrigger,
   MenubarContent,
   MenubarItem,
   MenubarSeparator,
   MenubarLabel,
   MenubarCheckboxItem,
-  MenubarRadioGroup,
   MenubarRadioItem,
-  MenubarPortal,
   MenubarSubContent,
   MenubarSubTrigger,
-  MenubarGroup,
-  MenubarSub,
   MenubarShortcut,
 }
