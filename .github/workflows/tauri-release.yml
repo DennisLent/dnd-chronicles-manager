@@ -53,8 +53,8 @@ jobs:
       - name: Debug TS config (paths)
         if: failure() && runner.os == 'Linux'
         run: |
-          echo "Showing tsconfig.app.json compilerOptions.paths"
-          node -e "console.log(require('./tsconfig.app.json').compilerOptions?.paths)"
+          echo "Showing tsconfig.app.json compilerOptions.paths (raw lines)"
+          sed -n '/"paths"/,+6p' tsconfig.app.json || true
           echo "tsc --showConfig excerpt:"
           pnpm exec tsc --showConfig -p tsconfig.app.json | sed -n '1,160p'
           echo "List src/lib"
