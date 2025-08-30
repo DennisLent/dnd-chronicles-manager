@@ -53,10 +53,12 @@ jobs:
       - name: Debug TS config (paths)
         if: failure() && runner.os == 'Linux'
         run: |
+          echo "CWD: $(pwd)"
+          ls -la
           echo "Showing tsconfig.app.json compilerOptions.paths (raw lines)"
           sed -n '/"paths"/,+6p' tsconfig.app.json || true
           echo "tsc --showConfig excerpt:"
-          pnpm exec tsc --showConfig -p tsconfig.app.json | sed -n '1,160p'
+          pnpm exec tsc --showConfig -p tsconfig.app.json | grep -nE 'moduleResolution|module|baseUrl|paths' -n -A2 -B2 || true
           echo "List src/lib"
           ls -la src/lib || true
 
