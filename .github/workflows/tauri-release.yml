@@ -7,16 +7,110 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.2.0 or v0.2.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  auto_tag:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Check if this push is a PR merge
+        id: check_merge
+        run: |
+          set -euo pipefail
+          # Consider merge commits and squash merges into main as PR merges.
+          PROCEED=0
+          if git rev-parse -q --verify HEAD^2 >/dev/null; then
+            # Merge commit detected
+            PROCEED=1
+          else
+            # Detect GitHub squash merge by subject suffix "(#<PR>)"
+            MSG=$(git log -1 --pretty=%s)
+            if echo "$MSG" | grep -Eq '\(#[0-9]+\)$'; then
+              PROCEED=1
+            fi
+          fi
+          echo "proceed=$([ "$PROCEED" = 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Configure Git
+        if: ${{ steps.check_merge.outputs.proceed == 'true' }}
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+      - name: Fetch tags
+        if: ${{ steps.check_merge.outputs.proceed == 'true' }}
+        run: git fetch --tags --force
+      - name: Determine tag
+        if: ${{ steps.check_merge.outputs.proceed == 'true' }}
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="apps/character-creator/src-tauri/tauri.conf.json"
+          VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9][^"]*\)".*/\1/p' "$FILE" | head -n1 || true)
+          if [ -z "$VERSION" ]; then VERSION="0.1.0"; fi
+          TAG="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            LAST=$(git tag -l 'v*' --sort=-v:refname | head -n1 || true)
+            if [ -n "$LAST" ]; then
+              BASE=${LAST#v}
+              IFS='.' read -r MA MI PA <<< "$BASE"
+              if [ -z "$PA" ]; then PA=0; fi
+              PA=$((PA+1))
+              TAG="v${MA}.${MI}.${PA}"
+            else
+              TAG="v0.1.0"
+            fi
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Create and push tag
+        if: ${{ steps.check_merge.outputs.proceed == 'true' }}
+        run: |
+          git tag -a "${{ steps.ver.outputs.tag }}" -m "Release ${{ steps.ver.outputs.tag }}"
+          git push origin "${{ steps.ver.outputs.tag }}"
+
+  create_tag_manual:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Configure Git
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+      - name: Create and push tag from input
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VER="$INPUT_VERSION"
+          VER="${VER#v}"
+          TAG="v$VER"
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists" >&2
+            exit 1
+          fi
+          git tag -a "$TAG" -m "Release $TAG (manual dispatch)"
+          git push origin "$TAG"
   build:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-14, macos-13]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -39,7 +133,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install Linux deps
-        if: runner.os == 'Linux'
+        if: ${{ runner.os == 'Linux' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -51,7 +145,7 @@ jobs:
         run: pnpm run typecheck
 
       - name: Debug TS config (paths)
-        if: failure() && runner.os == 'Linux'
+        if: ${{ failure() && runner.os == 'Linux' }}
         run: |
           echo "CWD: $(pwd)"
           ls -la
@@ -64,7 +158,7 @@ jobs:
           ls -la src/lib || true
 
       - name: Build Tauri bundle
-        run: pnpm tauri build
+        run: pnpm run tauri:build
         env:
           CI: true
           APPIMAGE_EXTRACT_AND_RUN: 1
@@ -77,15 +171,64 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      - name: Create simplified asset names
+        run: |
+          set -euxo pipefail
+          mkdir -p dist/renamed
+          # Windows installer: prefer .exe, fallback to .msi
+          WIN_EXE=$(find dist -type f -iname "*.exe" | head -n 1 || true)
+          WIN_MSI=$(find dist -type f -iname "*.msi" | head -n 1 || true)
+          if [ -n "${WIN_EXE}" ]; then
+            cp -f "${WIN_EXE}" dist/renamed/character-creator-windows-x64.exe
+          elif [ -n "${WIN_MSI}" ]; then
+            cp -f "${WIN_MSI}" dist/renamed/character-creator-windows-x64.msi
+          fi
+          # macOS disk image (.dmg)
+          # Try to detect architecture from filename and publish both if present
+          MAC_DMG_ARM=$(find dist -type f -iname "*arm64*.dmg" -o -iname "*aarch64*.dmg" | head -n 1 || true)
+          MAC_DMG_X64=$(find dist -type f -iname "*x86_64*.dmg" -o -iname "*x64*.dmg" | head -n 1 || true)
+          MAC_DMG_GENERIC=$(find dist -type f -iname "*.dmg" | head -n 1 || true)
+          if [ -n "${MAC_DMG_ARM}" ]; then
+            cp -f "${MAC_DMG_ARM}" dist/renamed/character-creator-macos-arm64.dmg
+          fi
+          if [ -n "${MAC_DMG_X64}" ]; then
+            cp -f "${MAC_DMG_X64}" dist/renamed/character-creator-macos-x64.dmg
+          fi
+          if [ -z "${MAC_DMG_ARM}" ] && [ -z "${MAC_DMG_X64}" ] && [ -n "${MAC_DMG_GENERIC}" ]; then
+            # Unknown arch dmg, publish as generic
+            cp -f "${MAC_DMG_GENERIC}" dist/renamed/character-creator-macos.dmg
+          else
+            # Prefer arm64 as the generic if available, else x64
+            if [ -n "${MAC_DMG_ARM}" ]; then
+              cp -f "${MAC_DMG_ARM}" dist/renamed/character-creator-macos.dmg
+            elif [ -n "${MAC_DMG_X64}" ]; then
+              cp -f "${MAC_DMG_X64}" dist/renamed/character-creator-macos.dmg
+            fi
+          fi
+          # Linux AppImage (.AppImage)
+          LINUX_APPIMAGE_X64=$(find dist -type f -iname "*x86_64*.AppImage" -o -iname "*x64*.AppImage" | head -n 1 || true)
+          LINUX_APPIMAGE_ARM=$(find dist -type f -iname "*aarch64*.AppImage" -o -iname "*arm64*.AppImage" | head -n 1 || true)
+          LINUX_APPIMAGE_GENERIC=$(find dist -type f -iname "*.AppImage" | head -n 1 || true)
+          if [ -n "${LINUX_APPIMAGE_X64}" ]; then
+            cp -f "${LINUX_APPIMAGE_X64}" dist/renamed/character-creator-linux-x86_64.AppImage
+          fi
+          if [ -n "${LINUX_APPIMAGE_ARM}" ]; then
+            cp -f "${LINUX_APPIMAGE_ARM}" dist/renamed/character-creator-linux-arm64.AppImage
+          fi
+          if [ -z "${LINUX_APPIMAGE_X64}" ] && [ -z "${LINUX_APPIMAGE_ARM}" ] && [ -n "${LINUX_APPIMAGE_GENERIC}" ]; then
+            cp -f "${LINUX_APPIMAGE_GENERIC}" dist/renamed/character-creator-linux.AppImage
+          fi
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
+          files: |
+            dist/renamed/*
+            dist/**/*
           draft: false
           prerelease: false
